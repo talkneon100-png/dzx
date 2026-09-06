@@ -210,6 +210,154 @@ def parse_proxy(proxy_str):
         return None
 
 
+# ── curl_cffi (Chrome TLS impersonation) — optional; used only for vault tokenize ──
+# Isolated wrapper so the aiohttp core stays untouched. If not installed, we
+# transparently fall back to the aiohttp path.
+_CURL_CFFI_OK = False
+try:
+    from curl_cffi.requests import AsyncSession as _CurlAsyncSession
+    _CURL_CFFI_OK = True
+except Exception:
+    _CurlAsyncSession = None
+
+_CURL_IMPERSONATE_POOL = ["chrome136", "chrome131", "chrome124", "chrome120"]
+
+# Multiple Shopify vault endpoints — try in order if one 403/times out.
+_VAULT_ENDPOINTS = [
+    "https://checkout.pci.shopifyinc.com/sessions",
+    "https://deposit.us.shopifycs.com/sessions",
+    "https://checkout.shopifycs.com/sessions",
+]
+
+
+def _proxy_to_url(proxy_str):
+    """Normalise a proxy string to http://user:pass@host:port for curl_cffi."""
+    if not proxy_str:
+        return None
+    s = proxy_str.strip()
+    if s.startswith(("http://", "https://", "socks4://", "socks5://")):
+        return s
+    if "@" in s:
+        return "http://" + s
+    parts = s.split(":")
+    if len(parts) == 2:
+        return f"http://{parts[0]}:{parts[1]}"
+    if len(parts) == 4:
+        return f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+    return None
+
+
+async def _tokenize_via_curl(payload, headers, proxy_str, endpoint):
+    """Send vault POST via curl_cffi with a real Chrome TLS fingerprint.
+    Returns token string or None (never raises)."""
+    if not _CURL_CFFI_OK:
+        return None
+    proxy_url = _proxy_to_url(proxy_str)
+    try:
+        clean_headers = {k: (v.encode("ascii", "ignore").decode() if isinstance(v, str) else v)
+                         for k, v in (headers or {}).items()}
+        kw = {"impersonate": random.choice(_CURL_IMPERSONATE_POOL),
+              "timeout": 15.0, "verify": False, "allow_redirects": True}
+        if proxy_url:
+            kw["proxy"] = proxy_url
+        async with _CurlAsyncSession(**kw) as sess:
+            r = await sess.post(endpoint, json=payload, headers=clean_headers)
+            try:
+                data = r.json()
+            except Exception:
+                return None
+            return (data or {}).get("id")
+    except Exception:
+        return None
+
+
+async def _tokenize_via_aiohttp(session, payload, headers, proxy_str, endpoint):
+    """Fallback vault POST through the existing aiohttp session."""
+    try:
+        r = await session.post(endpoint, json=payload, headers=headers,
+                               proxy=proxy_str, timeout=aiohttp.ClientTimeout(total=15))
+        try:
+            data = await r.json(content_type=None)
+        except Exception:
+            return None
+        return (data or {}).get("id")
+    except Exception:
+        return None
+
+
+async def tokenize_card_multi(session, payload, headers, proxy_str):
+    """Try curl_cffi across the 3 vault endpoints; if all fail, retry with aiohttp.
+    Returns token id or None."""
+    if _CURL_CFFI_OK:
+        for ep in _VAULT_ENDPOINTS:
+            tok = await _tokenize_via_curl(payload, headers, proxy_str, ep)
+            if tok:
+                return tok
+    for ep in _VAULT_ENDPOINTS:
+        tok = await _tokenize_via_aiohttp(session, payload, headers, proxy_str, ep)
+        if tok:
+            return tok
+    return None
+
+
+# ── Fast site-health check (products.json only, ~1 request) ────────────────
+async def check_site_fast(site_url, proxy_str=None, min_price=0.50, max_price=40.0):
+    """Return dict {ok, price, product, error} — no checkout, ~1 request."""
+    site_url = (site_url or "").strip().rstrip("/")
+    if not site_url:
+        return {"ok": False, "error": "empty url"}
+    if not site_url.startswith("http"):
+        site_url = "https://" + site_url
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/136.0.7103.93 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
+                                        ttl_dns_cache=300, keepalive_timeout=60,
+                                        enable_cleanup_closed=True)
+        timeout = aiohttp.ClientTimeout(total=12)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as sess:
+            r = await sess.get(site_url + "/products.json?limit=250",
+                               headers=headers, proxy=proxy_str)
+            if r.status != 200:
+                return {"ok": False, "error": f"HTTP {r.status}"}
+            try:
+                data = await r.json(content_type=None)
+            except Exception:
+                return {"ok": False, "error": "not shopify"}
+            prods = (data or {}).get("products") or []
+            if not prods:
+                return {"ok": False, "error": "no products"}
+            best_price = None
+            best_title = ""
+            for p in prods:
+                for v in p.get("variants") or []:
+                    if not v.get("available", True):
+                        continue
+                    try:
+                        pr = float(str(v.get("price", "0")).replace(",", ""))
+                    except Exception:
+                        continue
+                    if pr < min_price:
+                        continue
+                    if best_price is None or pr < best_price:
+                        best_price = pr
+                        best_title = p.get("title", "")[:60]
+            if best_price is None:
+                return {"ok": False, "error": "no available variants"}
+            ok = best_price <= max_price
+            return {"ok": ok, "price": best_price, "product": best_title,
+                    "error": None if ok else f"cheapest ${best_price:.2f} > ${max_price:.2f}"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "error": "timeout"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:60]}
+
+
+
 def is_captcha_required(response_text):
     if not response_text:
         return False
@@ -282,7 +430,9 @@ async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00)
         proxy = parse_proxy(proxy_str) if proxy_str else None
         host = urlparse(domain).hostname or domain
 
-        connector = aiohttp.TCPConnector(ssl=False)
+        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
+                                        ttl_dns_cache=300, keepalive_timeout=60,
+                                        enable_cleanup_closed=True)
         timeout   = aiohttp.ClientTimeout(total=12)
         ua, ch, platform = ua_pair()
         headers = {"User-Agent": ua, "Accept": "application/json,text/plain,*/*",
@@ -470,7 +620,9 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
                 return False, info[1], gateway, total_price, currency
             variant_id = info['variant_id']
 
-        connector = aiohttp.TCPConnector(ssl=False)
+        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
+                                        ttl_dns_cache=300, keepalive_timeout=60,
+                                        enable_cleanup_closed=True)
         timeout = aiohttp.ClientTimeout(total=30)
         
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -873,14 +1025,10 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
             if ident_sig:
                 vault_headers['shopify-identification-signature'] = ident_sig
             
-            response = await session.post('https://checkout.pci.shopifyinc.com/sessions', json=payload, headers=vault_headers, proxy=proxy)
-            try:
-                token_data = await response.json()
-                token = token_data.get('id')
-                if not token:
-                    return False, 'Unable to get payment token', gateway, total_price, currency
-            except Exception as e:
-                return False, f'Unable to get payment token: {str(e)}', gateway, total_price, currency
+            token = await tokenize_card_multi(session, payload, vault_headers, proxy)
+            if not token:
+                return False, 'Unable to get payment token', gateway, total_price, currency
+
 
             params = {'operationName': 'SubmitForCompletion'}
             
@@ -1251,7 +1399,7 @@ def _loop_runner():
 
 threading.Thread(target=_loop_runner, name="api-loop", daemon=True).start()
 
-def run_async(coro, timeout=180):
+def run_async(coro, timeout=75):
     return asyncio.run_coroutine_threadsafe(coro, _loop).result(timeout=timeout)
 
 app = Flask(__name__)
@@ -1345,8 +1493,42 @@ def check_alias():
 def health():
     return jsonify({"ok": True, "gate": "Shopify", "countries": len(book) - 1})
 
+
+@app.route('/site', methods=['GET', 'POST'])
+def site_health():
+    """Fast site check — no card burned. ?site=<url>&proxy=<proxy>&max=40
+    Returns {"ok":bool,"price":float,"product":str,"error":str|None}"""
+    src = request.args if request.method == 'GET' else (request.get_json(silent=True) or request.args)
+    site = (src.get('site') or src.get('url') or '').strip()
+    proxy_raw = (src.get('proxy') or '').strip()
+    try:
+        max_price = float(src.get('max') or 40.0)
+    except (TypeError, ValueError):
+        max_price = 40.0
+    if not site:
+        return jsonify({"ok": False, "error": "site is required"}), 400
+    proxy_str = parse_proxy(proxy_raw) if proxy_raw else None
+    try:
+        res = run_async(check_site_fast(site, proxy_str, max_price=max_price), timeout=25)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:80], "site": site})
+    res["site"] = site
+    return jsonify(res)
+
+
 # Coded by @aiojames
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    # Flask's dev server chokes past a few dozen sockets. waitress is a real
+    # WSGI server and handles 200+ parallel checks on the same box.
+    try:
+        from waitress import serve as _serve
+        _threads = int(os.environ.get("API_THREADS", "400"))
+        print(f"[api] waitress on :{port} threads={_threads}")
+        _serve(app, host="0.0.0.0", port=port, threads=_threads,
+               connection_limit=2000, channel_timeout=120, backlog=2048,
+               asyncore_use_poll=True)
+    except ImportError:
+        print(f"[api] waitress not installed — falling back to Flask dev server on :{port}")
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
 
