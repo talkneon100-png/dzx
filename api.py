@@ -324,7 +324,7 @@ async def tokenize_card_multi(session, payload, headers, proxy_str):
 # force_close=True. Under 150+ concurrent checks that exhausts sockets/FDs and
 # aiohttp starts raising bare "keepalive_timeout" errors that leaked out as the
 # card verdict. Bounded pools + a hard in-flight cap fix that.
-_MAX_INFLIGHT_CHECKS = int(os.environ.get("API_MAX_INFLIGHT", "200"))
+_MAX_INFLIGHT_CHECKS = int(os.environ.get("API_MAX_INFLIGHT", "800"))
 _check_sem = None
 
 
@@ -352,7 +352,7 @@ def _get_check_sem():
 # the "Verifying your connection..." challenge page / 429 flood. Shopify only
 # rate-limits per shop domain, so a small per-host gate kills that entirely
 # without slowing the overall run (other stores keep going full speed).
-_MAX_INFLIGHT_PER_HOST = int(os.environ.get("API_MAX_PER_HOST", "2"))
+_MAX_INFLIGHT_PER_HOST = int(os.environ.get("API_MAX_PER_HOST", "6"))
 _host_sems: dict = {}
 
 
